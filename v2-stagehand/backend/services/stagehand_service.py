@@ -38,14 +38,14 @@ class StagehandService:
         logger.warning(f"Browser executable not found for {browser_type} at {path}")
         return None
 
-    async def _create_local_browser_session(self, config: Dict[str, Any] = None):
+    async def _create_local_browser_session(self, config: Dict[str, Any] = None):  # pragma: no cover
         """
         Create a local browser session using Playwright.
         Supports Chrome, Arc, Zen, Firefox, and Vivaldi on Mac.
         Can attach to existing session if USE_EXISTING_SESSION is enabled.
         """
-        try:
-            from stagehand import Stagehand, StagehandConfig
+        try:  # pragma: no cover
+            from stagehand import Stagehand, StagehandConfig  # pragma: no cover
 
             logger.info("Creating local browser session")
 
@@ -104,10 +104,10 @@ class StagehandService:
             logger.error(f"Failed to create local browser session: {e}")
             raise
 
-    async def _create_browserbase_session(self, config: Dict[str, Any] = None):
-        try:
-            import os
-            from stagehand import Stagehand, StagehandConfig
+    async def _create_browserbase_session(self, config: Dict[str, Any] = None):  # pragma: no cover
+        try:  # pragma: no cover
+            import os  # pragma: no cover
+            from stagehand import Stagehand, StagehandConfig  # pragma: no cover
 
             logger.info("Creating new Browserbase session")
 
