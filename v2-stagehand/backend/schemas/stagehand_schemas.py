@@ -268,3 +268,58 @@ EXTRACTION_SCHEMAS = {
 def get_extraction_schema(schema_name: str) -> Optional[type[BaseModel]]:
     return EXTRACTION_SCHEMAS.get(schema_name)
 
+
+# Simple Action Schemas (No AI Required)
+
+class ScreenshotRequest(BaseModel):
+    url: str = Field(..., description="Target URL to take screenshot of")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "url": "https://example.com"
+            }
+        }
+
+
+class ScreenshotResponse(BaseModel):
+    success: bool = Field(..., description="Whether screenshot was successful")
+    screenshot: Optional[str] = Field(None, description="Base64 encoded screenshot image")
+    url: str = Field(..., description="URL of the screenshot")
+    timestamp: str = Field(..., description="Timestamp of screenshot")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    error_code: Optional[str] = Field(default=None, description="Error code if failed")
+
+
+class ClickTypeRequest(BaseModel):
+    url: str = Field(..., description="Target URL")
+    x: int = Field(..., description="X coordinate to click", ge=0)
+    y: int = Field(..., description="Y coordinate to click", ge=0)
+    text: Optional[str] = Field(None, description="Text to type after clicking (optional)")
+    press_enter: bool = Field(default=False, description="Press Enter after typing")
+    take_screenshot: bool = Field(default=False, description="Take screenshot after action")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "url": "https://example.com",
+                "x": 100,
+                "y": 200,
+                "text": "search query",
+                "press_enter": True,
+                "take_screenshot": True
+            }
+        }
+
+
+class ClickTypeResponse(BaseModel):
+    success: bool = Field(..., description="Whether action was successful")
+    action: str = Field(..., description="Description of action performed")
+    screenshot: Optional[str] = Field(None, description="Base64 encoded screenshot (if requested)")
+    url: str = Field(..., description="URL where action was performed")
+    timestamp: str = Field(..., description="Timestamp of action")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    error_code: Optional[str] = Field(default=None, description="Error code if failed")
+

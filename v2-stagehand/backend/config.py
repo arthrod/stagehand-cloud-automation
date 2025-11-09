@@ -35,10 +35,28 @@ class Settings(BaseSettings):
     BROWSERBASE_API_KEY: Optional[str] = Field(default=None, description="Browserbase API key")
     BROWSERBASE_PROJECT_ID: Optional[str] = Field(default=None, description="Browserbase project ID")
 
+    # Local Browser Configuration (Mac Support)
+    BROWSER_TYPE: str = Field(
+        default="chrome",
+        description="Browser type: chrome, arc, zen, firefox, vivaldi"
+    )
+    BROWSER_EXECUTABLE_PATH: Optional[str] = Field(
+        default=None,
+        description="Path to browser executable (auto-detected if not set)"
+    )
+    USE_EXISTING_SESSION: bool = Field(
+        default=False,
+        description="Attach to existing browser session instead of launching new one"
+    )
+    BROWSER_CDP_URL: Optional[str] = Field(
+        default=None,
+        description="Chrome DevTools Protocol URL for attaching to existing session (e.g., http://localhost:9222)"
+    )
+
     # Stagehand Settings
     DOM_SETTLE_TIMEOUT_MS: int = Field(default=30000, description="DOM settle timeout in milliseconds")
     SELF_HEAL: bool = Field(default=True, description="Enable self-healing functionality")
-    HEADLESS: bool = Field(default=True, description="Run browser in headless mode")
+    HEADLESS: bool = Field(default=True, description="Run browser in headless mode (ignored when USE_EXISTING_SESSION=true)")
 
     # Job Processing (legacy, kept for compatibility)
     MAX_CONCURRENT_JOBS: int = Field(default=3, description="Maximum concurrent jobs")

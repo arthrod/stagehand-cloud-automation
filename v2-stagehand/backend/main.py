@@ -19,6 +19,10 @@ from schemas.stagehand_schemas import (
     ProductData,
     JobPosting,
     CompanyInfo,
+    ScreenshotRequest,
+    ScreenshotResponse,
+    ClickTypeRequest,
+    ClickTypeResponse,
 )
 from schemas.multistep_schemas import MultiStepJobRequest, MultiStepJobResponse
 from schemas.common import HealthResponse
@@ -279,6 +283,56 @@ async def list_available_schemas():
             detail="Failed to list schemas"
         )
 
+
+# Simple Actions (No AI Required)
+
+@app.post(
+    "/api/v1/simple/screenshot",
+    response_model=ScreenshotResponse,
+    tags=["Simple Actions"],
+    summary="Take screenshot of webpage (no AI required)"
+)
+async def take_screenshot(request: ScreenshotRequest):
+    try:
+        logger.info(f"Taking screenshot of {request.url}")
+        result = await stagehand_service.take_screenshot(url=request.url)
+        logger.info(f"Screenshot completed")
+        return result
+
+    except Exception as e:
+        logger.error(f"Screenshot failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Screenshot failed: {str(e)}"
+        )
+
+
+@app.post(
+    "/api/v1/simple/click-type",
+    response_model=ClickTypeResponse,
+    tags=["Simple Actions"],
+    summary="Click at coordinates, type text, and press enter (no AI required)"
+)
+async def click_type_enter(request: ClickTypeRequest):
+    try:
+        logger.info(f"Click/type action on {request.url} at ({request.x}, {request.y})")
+        result = await stagehand_service.click_type_enter(
+            url=request.url,
+            x=request.x,
+            y=request.y,
+            text=request.text,
+            press_enter=request.press_enter,
+            take_screenshot=request.take_screenshot
+        )
+        logger.info(f"Click/type action completed")
+        return result
+
+    except Exception as e:
+        logger.error(f"Click/type action failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Click/type action failed: {str(e)}"
+        )
 
 
 # Error Handlers
