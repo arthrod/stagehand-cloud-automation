@@ -4,6 +4,7 @@ omit =
     */__pycache__/*
     */site-packages/*
     */.venv/*
+    mcp_server.py
 
 [report]
 exclude_lines =

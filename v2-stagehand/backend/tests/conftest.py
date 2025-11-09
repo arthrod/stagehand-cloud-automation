@@ -17,6 +17,13 @@ sys.path.insert(0, str(backend_dir))
 # Mock stagehand imports before they're needed
 sys.modules['stagehand'] = MagicMock()
 
+# Mock fastmcp imports to avoid cryptography dependency issues
+mock_fastmcp = MagicMock()
+mock_mcp = MagicMock()
+sys.modules['fastmcp'] = mock_fastmcp
+sys.modules['fastmcp.server'] = MagicMock()
+mock_fastmcp.FastMCP = MagicMock(return_value=mock_mcp)
+
 
 @pytest.fixture(scope="session")
 def test_env_vars():
