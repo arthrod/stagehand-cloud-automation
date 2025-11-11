@@ -315,6 +315,13 @@ async def take_screenshot(request: ScreenshotRequest):
 )
 async def click_type_enter(request: ClickTypeRequest):
     try:
+        # Defensive validation to ensure non-negative coordinates
+        if request.x < 0 or request.y < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Coordinates must be non-negative"
+            )
+
         logger.info(f"Click/type action on {request.url} at ({request.x}, {request.y})")
         result = await stagehand_service.click_type_enter(
             url=request.url,
