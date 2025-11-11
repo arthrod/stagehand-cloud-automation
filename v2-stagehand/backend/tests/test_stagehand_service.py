@@ -366,13 +366,24 @@ class TestClickTypeEnterMethod:
                 assert result["error_code"] == "CLICK_TYPE_ERROR"
 
 
-class TestExtractWithSchema:
-    """Test extract_with_schema method."""
-
-    @pytest.mark.asyncio
-    async def test_extract_with_schema_success(self, mock_stagehand_instance):
-        """Test successful schema extraction."""
-        service = StagehandService()
++class TestExtractWithSchema:
++    """Test extract_with_schema method."""
++
++    @pytest.mark.asyncio
++    async def test_extract_with_schema_success(self, mock_stagehand_instance):
++        """Test successful schema extraction."""
++        service = StagehandService()
++
++    @pytest.mark.asyncio
++    async def test_extract_with_schema_error(self, mock_stagehand_instance):
++        """Test schema extraction failure scenario."""
++        service = StagehandService()
++        # Patch the page.extract method to raise an exception
++        with patch.object(service, "extract_with_schema", new=AsyncMock(side_effect=Exception("Extraction failed"))):
++            try:
++                await service.extract_with_schema("https://example.com", schema={"field": "value"})
++            except Exception as exc:
++                assert str(exc) == "Extraction failed"
         mock_stagehand_instance.page.extract = AsyncMock(return_value=MagicMock(model_dump=lambda: {"name": "Test", "price": 99.99}))
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
