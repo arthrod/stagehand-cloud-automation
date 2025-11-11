@@ -142,7 +142,7 @@ def click(
             output_data = {k: v for k, v in result.items() if k != "screenshot"}
             console.print(JSON(json.dumps(output_data)))
         else:
-            console.print(f"[green]✓[/green] Action completed successfully!")
+            console.print("[green]✓[/green] Action completed successfully!")
             console.print(f"Action: {result['action']}")
             console.print(f"Processing time: {result['processing_time']:.2f}s")
 
