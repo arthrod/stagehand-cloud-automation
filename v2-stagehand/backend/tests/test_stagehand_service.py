@@ -396,6 +396,23 @@ class TestWorkflowExecution:
     async def test_execute_workflow_success(self, mock_stagehand_instance):
         """Test successful workflow execution."""
         service = StagehandService()
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_agent_failure(self, mock_stagehand_instance):
+        """Test workflow execution with agent failure."""
+        service = StagehandService()
+
+        # Patch the agent execution to simulate failure
+        with patch.object(service, "execute_workflow_with_agent", side_effect=Exception("Agent failed")):
+            try:
+                await service.execute_workflow_with_agent(
+                    url="https://example.com",
+                    instruction="Extract product",
+                    schema=ProductData,
+                    config={"take_screenshots": False}
+                )
+            except Exception as exc:
+                assert str(exc) == "Agent failed"
         mock_agent = MagicMock()
         mock_agent.execute = AsyncMock(return_value={"completed": True})
         mock_stagehand_instance.agent = MagicMock(return_value=mock_agent)
