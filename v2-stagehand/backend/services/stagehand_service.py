@@ -3,6 +3,8 @@ import logging
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from config import settings
 
 
@@ -12,6 +14,22 @@ logger = logging.getLogger(__name__)
 class StagehandService:
     def __init__(self):
         pass
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((TimeoutError, ConnectionError)),
+        reraise=True
+    )
+    async def _navigate_with_retry(self, page: Any, url: str) -> None:
+        """
+        Navigate to URL with automatic retry on transient failures.
+        Retries up to 3 times with exponential backoff (2s, 4s, 8s).
+        """
+        logger.info(f"Navigating to {url}")
+        await page.goto(url, timeout=settings.PAGE_LOAD_TIMEOUT_MS)
+        await page.wait_for_load_state('networkidle', timeout=settings.NETWORK_IDLE_TIMEOUT_MS)
+        logger.info(f"Successfully navigated to {url}")
 
     def _get_browser_executable_path(self, browser_type: str) -> Optional[str]:
         """
@@ -38,7 +56,7 @@ class StagehandService:
         logger.warning(f"Browser executable not found for {browser_type} at {path}")
         return None
 
-    async def _create_local_browser_session(self, config: Dict[str, Any] = None):  # pragma: no cover
+    async def _create_local_browser_session(self, config: Optional[Dict[str, Any]] = None):  # pragma: no cover
         """
         Create a local browser session using Playwright.
         Supports Chrome, Arc, Zen, Firefox, and Vivaldi on Mac.
@@ -104,7 +122,7 @@ class StagehandService:
             logger.error(f"Failed to create local browser session: {e}")
             raise
 
-    async def _create_browserbase_session(self, config: Dict[str, Any] = None):  # pragma: no cover
+    async def _create_browserbase_session(self, config: Optional[Dict[str, Any]] = None):  # pragma: no cover
         try:  # pragma: no cover
             import os  # pragma: no cover
             from stagehand import Stagehand, StagehandConfig  # pragma: no cover
@@ -161,7 +179,7 @@ class StagehandService:
             logger.error(f"Failed to create Browserbase session: {e}")
             raise
 
-    async def _create_session(self, config: Dict[str, Any] = None):
+    async def _create_session(self, config: Optional[Dict[str, Any]] = None) -> Any:
         """
         Create a Stagehand session based on STAGEHAND_ENV setting.
         Routes to either Browserbase or local browser session.
@@ -171,7 +189,7 @@ class StagehandService:
         else:
             return await self._create_browserbase_session(config)
 
-    async def _close_session(self, stagehand):
+    async def _close_session(self, stagehand: Any) -> None:
         """
         Close a Stagehand session (works for both Browserbase and local).
         """
@@ -188,7 +206,7 @@ class StagehandService:
             logger.error(f"Error closing session: {e}")
             # Don't raise - we want to continue even if close fails
 
-    async def _close_browserbase_session(self, stagehand):
+    async def _close_browserbase_session(self, stagehand: Any) -> None:
         """Legacy method - now calls _close_session"""
         await self._close_session(stagehand)
 
@@ -246,8 +264,8 @@ class StagehandService:
             stagehand = await self._create_session(config)
             page = stagehand.page
 
-            # Navigate to URL
-            await page.goto(url)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
 
             # Use observe to plan the action
             draw_overlay = config.get("draw_overlay", False)
@@ -330,8 +348,8 @@ class StagehandService:
             stagehand = await self._create_session(config)
             page = stagehand.page
 
-            # Navigate to URL
-            await page.goto(url)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
 
             # Extract data using schema
             data = await page.extract(
@@ -396,8 +414,8 @@ class StagehandService:
             stagehand = await self._create_session(config)
             page = stagehand.page
 
-            # Navigate to URL
-            await page.goto(url)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
 
             # Create agent
             agent_model = config.get("agent_model", "computer-use-preview")
@@ -485,7 +503,8 @@ class StagehandService:
             page = stagehand.page
             steps_results = []
 
-            await page.goto(url)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
             logger.info(f"Navigated to {url}")
 
             await asyncio.sleep(2)
@@ -708,11 +727,8 @@ class StagehandService:
             stagehand = await self._create_session({})
             page = stagehand.page
 
-            # Navigate to URL
-            await page.goto(url, timeout=30000)
-
-            # Wait for network to be idle with explicit timeout to avoid hanging
-            await page.wait_for_load_state('networkidle', timeout=30000)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
 
             # Take screenshot
             import base64
@@ -764,8 +780,8 @@ class StagehandService:
             stagehand = await self._create_session({})
             page = stagehand.page
 
-            # Navigate to URL
-            await page.goto(url)
+            # Navigate to URL with retry logic
+            await self._navigate_with_retry(page, url)
 
             # Wait a bit for page to settle
             await asyncio.sleep(2)

@@ -20,7 +20,7 @@ class TestHealthEndpoints:
 
     def test_readiness_check_not_ready(self, sync_client):
         """Test readiness check when not configured."""
-        with patch("main.stagehand_service.test_connection", new=AsyncMock(return_value=False)):
+        with patch("services.stagehand_service.StagehandService.test_connection", new=AsyncMock(return_value=False)):
             response = sync_client.get("/health/ready")
 
             assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
@@ -29,7 +29,7 @@ class TestHealthEndpoints:
 
     def test_readiness_check_ready(self, sync_client):
         """Test readiness check when ready."""
-        with patch("main.stagehand_service.test_connection", new=AsyncMock(return_value=True)):
+        with patch("services.stagehand_service.StagehandService.test_connection", new=AsyncMock(return_value=True)):
             response = sync_client.get("/health/ready")
 
             assert response.status_code == status.HTTP_200_OK
@@ -53,7 +53,7 @@ class TestActionEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.perform_action_with_observe",
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -74,7 +74,7 @@ class TestActionEndpoint:
     def test_action_endpoint_error(self, sync_client):
         """Test action endpoint with error."""
         with patch(
-            "main.stagehand_service.perform_action_with_observe",
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
             new=AsyncMock(side_effect=Exception("Test error")),
         ):
             response = sync_client.post(
@@ -105,7 +105,7 @@ class TestExtractionEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.extract_with_schema",
+            "services.stagehand_service.StagehandService.extract_with_schema",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -152,7 +152,7 @@ class TestWorkflowEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.execute_workflow_with_agent",
+            "services.stagehand_service.StagehandService.execute_workflow_with_agent",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -211,7 +211,7 @@ class TestMultiStepEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.process_multi_step_instructions",
+            "services.stagehand_service.StagehandService.process_multi_step_instructions",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -258,7 +258,7 @@ class TestSimpleScreenshotEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.take_screenshot",
+            "services.stagehand_service.StagehandService.take_screenshot",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -274,7 +274,7 @@ class TestSimpleScreenshotEndpoint:
     def test_screenshot_endpoint_error(self, sync_client):
         """Test screenshot with error."""
         with patch(
-            "main.stagehand_service.take_screenshot",
+            "services.stagehand_service.StagehandService.take_screenshot",
             new=AsyncMock(side_effect=Exception("Screenshot failed")),
         ):
             response = sync_client.post(
@@ -300,7 +300,7 @@ class TestSimpleClickTypeEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.click_type_enter",
+            "services.stagehand_service.StagehandService.click_type_enter",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -331,7 +331,7 @@ class TestSimpleClickTypeEndpoint:
         }
 
         with patch(
-            "main.stagehand_service.click_type_enter",
+            "services.stagehand_service.StagehandService.click_type_enter",
             new=AsyncMock(return_value=mock_result),
         ):
             response = sync_client.post(
@@ -398,7 +398,38 @@ class TestErrorHandlers:
     def test_general_exception_handler(self, sync_client):
         """Test general exception handler for unhandled errors."""
         with patch(
-            "main.stagehand_service.take_screenshot",
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
+            side_effect=Exception("Unhandled error"),
+        ):
+            response = sync_client.post(
+                "/action",
+                json={"action": "test"},
+            )
+            assert response.status_code == 500
+            assert "error" in response.json()
+
+    def test_general_exception_handler_with_error_code(self, sync_client):
+        """Test general exception handler includes error_code when present."""
+
+        class CustomException(Exception):
+            def __init__(self, message, error_code):
+                super().__init__(message)
+                self.error_code = error_code
+
+        with patch(
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
+            side_effect=CustomException("Specific error", error_code="E1234"),
+        ):
+            response = sync_client.post(
+                "/action",
+                json={"action": "test"},
+            )
+            assert response.status_code == 500
+            data = response.json()
+            assert "error" in data
+            assert "error_code" in data
+            assert data["error_code"] == "E1234"
+            "services.stagehand_service.StagehandService.take_screenshot",
             new=AsyncMock(side_effect=RuntimeError("Unexpected error")),
         ):
             response = sync_client.post(

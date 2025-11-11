@@ -72,6 +72,8 @@ def mock_stagehand_instance():
     mock_page.act = AsyncMock()
     mock_page.extract = AsyncMock(return_value={"data": "test"})
     mock_page.screenshot = AsyncMock(return_value=b"fake_screenshot_data")
+    mock_page.viewport_size = AsyncMock(return_value={"width": 1920, "height": 1080})
+    mock_page.evaluate = AsyncMock()
     mock_page.mouse = MagicMock()
     mock_page.mouse.click = AsyncMock()
     mock_page.keyboard = MagicMock()

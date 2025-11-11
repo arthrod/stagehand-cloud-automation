@@ -65,18 +65,24 @@ def screenshot(
         stagehand screenshot https://example.com --output screenshot.png
         stagehand screenshot https://example.com --json
     """
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task(f"Capturing screenshot of {url}...", total=None)
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Capturing screenshot of {url}...", total=None)
 
-        result = run_async(service.take_screenshot(url=url))
+            result = run_async(service.take_screenshot(url=url))
 
-        progress.remove_task(task)
+            progress.remove_task(task)
 
-    if result.get("success"):
+        if not result.get("success"):
+            console.print(f"[red]✗[/red] Screenshot failed: {result.get('error', 'Unknown error')}")
+            if result.get('error_code'):
+                console.print(f"[red]Error code: {result['error_code']}[/red]")
+            raise typer.Exit(code=1)
+
         if json_output:
             # Output JSON without screenshot data (too large)
             output_data = {k: v for k, v in result.items() if k != "screenshot"}
@@ -94,8 +100,11 @@ def screenshot(
                 console.print(f"[green]✓[/green] Saved to: {output}")
             else:
                 console.print(f"[yellow]ℹ[/yellow] Use --output to save the screenshot to a file")
-    else:
-        console.print(f"[red]✗[/red] Screenshot failed: {result.get('error')}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗[/red] Fatal error: {str(e)}")
         raise typer.Exit(code=1)
 
 
@@ -119,25 +128,36 @@ def click(
         stagehand click https://google.com --x 500 --y 300 --text "search query" --enter
         stagehand click https://example.com --x 100 --y 200 --screenshot --output result.png
     """
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task(f"Executing click action on {url}...", total=None)
+    try:
+        # Validate coordinates
+        if x < 0 or y < 0:
+            console.print(f"[red]✗[/red] Error: Coordinates must be non-negative")
+            raise typer.Exit(code=1)
 
-        result = run_async(service.click_type_enter(
-            url=url,
-            x=x,
-            y=y,
-            text=text,
-            press_enter=enter,
-            take_screenshot=screenshot
-        ))
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Executing click action on {url}...", total=None)
 
-        progress.remove_task(task)
+            result = run_async(service.click_type_enter(
+                url=url,
+                x=x,
+                y=y,
+                text=text,
+                press_enter=enter,
+                take_screenshot=screenshot
+            ))
 
-    if result.get("success"):
+            progress.remove_task(task)
+
+        if not result.get("success"):
+            console.print(f"[red]✗[/red] Action failed: {result.get('error', 'Unknown error')}")
+            if result.get('error_code'):
+                console.print(f"[red]Error code: {result['error_code']}[/red]")
+            raise typer.Exit(code=1)
+
         if json_output:
             output_data = {k: v for k, v in result.items() if k != "screenshot"}
             console.print(JSON(json.dumps(output_data)))
@@ -151,8 +171,11 @@ def click(
                 screenshot_data = base64.b64decode(result["screenshot"])
                 Path(output).write_bytes(screenshot_data)
                 console.print(f"[green]✓[/green] Screenshot saved to: {output}")
-    else:
-        console.print(f"[red]✗[/red] Action failed: {result.get('error')}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗[/red] Fatal error: {str(e)}")
         raise typer.Exit(code=1)
 
 
@@ -173,25 +196,31 @@ def action(
         stagehand action https://shop.example.com "Add the first product to cart"
         stagehand action https://form.example.com "Fill in the email field with test@example.com" --screenshot
     """
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task(f"Performing AI-guided action...", total=None)
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Performing AI-guided action...", total=None)
 
-        result = run_async(service.perform_action_with_observe(
-            url=url,
-            action_instruction=instruction,
-            config={
-                "draw_overlay": overlay,
-                "take_screenshots": screenshot
-            }
-        ))
+            result = run_async(service.perform_action_with_observe(
+                url=url,
+                action_instruction=instruction,
+                config={
+                    "draw_overlay": overlay,
+                    "take_screenshots": screenshot
+                }
+            ))
 
-        progress.remove_task(task)
+            progress.remove_task(task)
 
-    if result.get("success"):
+        if not result.get("success"):
+            console.print(f"[red]✗[/red] Action failed: {result.get('error', 'Unknown error')}")
+            if result.get('error_code'):
+                console.print(f"[red]Error code: {result['error_code']}[/red]")
+            raise typer.Exit(code=1)
+
         if json_output:
             output_data = {k: v for k, v in result.items() if k != "artifacts"}
             console.print(JSON(json.dumps(output_data)))
@@ -200,8 +229,11 @@ def action(
             console.print(f"Instruction: {result['action']}")
             console.print(f"Observed elements: {result['observed_elements']}")
             console.print(f"Processing time: {result['processing_time']:.2f}s")
-    else:
-        console.print(f"[red]✗[/red] Action failed: {result.get('error')}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗[/red] Fatal error: {str(e)}")
         raise typer.Exit(code=1)
 
 
@@ -225,35 +257,41 @@ def extract(
         stagehand extract https://jobs.example.com/posting "Get job details" --schema JobPosting
         stagehand extract https://company.example.com "Extract company info" --schema CompanyInfo --json
     """
-    schema_map = {
-        "ProductData": ProductData,
-        "JobPosting": JobPosting,
-        "CompanyInfo": CompanyInfo
-    }
+    try:
+        schema_map = {
+            "ProductData": ProductData,
+            "JobPosting": JobPosting,
+            "CompanyInfo": CompanyInfo
+        }
 
-    schema_class = schema_map.get(schema)
-    if not schema_class:
-        console.print(f"[red]✗[/red] Unknown schema: {schema}")
-        console.print(f"Available schemas: {', '.join(schema_map.keys())}")
-        raise typer.Exit(code=1)
+        schema_class = schema_map.get(schema)
+        if not schema_class:
+            console.print(f"[red]✗[/red] Unknown schema: {schema}")
+            console.print(f"Available schemas: {', '.join(schema_map.keys())}")
+            raise typer.Exit(code=1)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task(f"Extracting data from {url}...", total=None)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Extracting data from {url}...", total=None)
 
-        result = run_async(service.extract_with_schema(
-            url=url,
-            instruction=instruction,
-            schema=schema_class,
-            config={"take_screenshots": screenshot}
-        ))
+            result = run_async(service.extract_with_schema(
+                url=url,
+                instruction=instruction,
+                schema=schema_class,
+                config={"take_screenshots": screenshot}
+            ))
 
-        progress.remove_task(task)
+            progress.remove_task(task)
 
-    if result.get("success"):
+        if not result.get("success"):
+            console.print(f"[red]✗[/red] Extraction failed: {result.get('error', 'Unknown error')}")
+            if result.get('error_code'):
+                console.print(f"[red]Error code: {result['error_code']}[/red]")
+            raise typer.Exit(code=1)
+
         if json_output:
             console.print(JSON(json.dumps(result)))
         else:
@@ -269,8 +307,11 @@ def extract(
 
             console.print(table)
             console.print(f"\nProcessing time: {result['processing_time']:.2f}s")
-    else:
-        console.print(f"[red]✗[/red] Extraction failed: {result.get('error')}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗[/red] Fatal error: {str(e)}")
         raise typer.Exit(code=1)
 
 
@@ -292,26 +333,41 @@ def workflow(
         stagehand workflow https://shop.example.com "Find and add laptop to cart" --max-steps 30
         stagehand workflow https://form.example.com "Complete the registration form" --json
     """
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task(f"Executing workflow...", total=None)
+    try:
+        # Validate parameters
+        if max_steps < 1 or max_steps > 100:
+            console.print(f"[red]✗[/red] Error: max_steps must be between 1 and 100")
+            raise typer.Exit(code=1)
 
-        result = run_async(service.execute_workflow_with_agent(
-            url=url,
-            workflow_instruction=instruction,
-            config={
-                "max_steps": max_steps,
-                "auto_screenshot": screenshot,
-                "wait_between_actions": wait
-            }
-        ))
+        if wait < 0 or wait > 10000:
+            console.print(f"[red]✗[/red] Error: wait must be between 0 and 10000 milliseconds")
+            raise typer.Exit(code=1)
 
-        progress.remove_task(task)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Executing workflow...", total=None)
 
-    if result.get("success"):
+            result = run_async(service.execute_workflow_with_agent(
+                url=url,
+                workflow_instruction=instruction,
+                config={
+                    "max_steps": max_steps,
+                    "auto_screenshot": screenshot,
+                    "wait_between_actions": wait
+                }
+            ))
+
+            progress.remove_task(task)
+
+        if not result.get("success"):
+            console.print(f"[red]✗[/red] Workflow failed: {result.get('error', 'Unknown error')}")
+            if result.get('error_code'):
+                console.print(f"[red]Error code: {result['error_code']}[/red]")
+            raise typer.Exit(code=1)
+
         if json_output:
             console.print(JSON(json.dumps(result)))
         else:
@@ -323,8 +379,11 @@ def workflow(
             if result.get("result"):
                 console.print(f"\n[bold]Result:[/bold]")
                 console.print(Panel(JSON(json.dumps(result["result"]))))
-    else:
-        console.print(f"[red]✗[/red] Workflow failed: {result.get('error')}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗[/red] Fatal error: {str(e)}")
         raise typer.Exit(code=1)
 
 

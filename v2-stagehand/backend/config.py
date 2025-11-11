@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     SELF_HEAL: bool = Field(default=True, description="Enable self-healing functionality")
     HEADLESS: bool = Field(default=True, description="Run browser in headless mode (ignored when USE_EXISTING_SESSION=true)")
 
+    # Timeout Configuration
+    PAGE_LOAD_TIMEOUT_MS: int = Field(default=30000, description="Page load timeout in milliseconds")
+    NETWORK_IDLE_TIMEOUT_MS: int = Field(default=30000, description="Network idle timeout in milliseconds")
+
     # Job Processing (legacy, kept for compatibility)
     MAX_CONCURRENT_JOBS: int = Field(default=3, description="Maximum concurrent jobs")
     JOB_TIMEOUT_MINUTES: int = Field(default=15, description="Job timeout in minutes")

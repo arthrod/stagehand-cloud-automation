@@ -1,50 +1,55 @@
-import sys
+"""
+Frontend configuration.
+
+This module provides frontend-specific settings that are decoupled from backend configuration.
+Frontend communicates with backend via API endpoints, so it only needs the API URL.
+"""
+
 from functools import lru_cache
 from pathlib import Path
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-backend_path = Path(__file__).resolve().parent.parent / "backend"
-backend_path_str = str(backend_path)
-
-if backend_path_str not in sys.path:
-    sys.path.insert(0, backend_path_str)
-
-_backend_settings = None
-_backend_config_loaded = False
+# Get the directory containing this config file
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def _load_backend_config():
-    global _backend_settings, _backend_config_loaded
+class FrontendSettings(BaseSettings):
+    """Frontend-specific settings."""
 
-    if _backend_config_loaded:
-        return _backend_settings
+    # Frontend App Settings
+    APP_NAME: str = Field(default="Stagehand Frontend", description="Frontend application name")
+    VERSION: str = Field(default="1.0.0", description="Frontend version")
 
-    try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "backend_config",
-            backend_path / "config.py"
-        )
-        backend_config = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(backend_config)
+    # Backend API Configuration
+    BACKEND_API_URL: str = Field(
+        default="http://localhost:8000",
+        description="Backend API base URL"
+    )
+    BACKEND_API_TIMEOUT: int = Field(
+        default=300,
+        description="Backend API timeout in seconds"
+    )
 
-        _backend_settings = backend_config.get_settings()
-        _backend_config_loaded = True
-        return _backend_settings
+    # Streamlit Configuration (if using Streamlit)
+    STREAMLIT_SERVER_PORT: int = Field(default=8501, description="Streamlit server port")
+    STREAMLIT_SERVER_ADDRESS: str = Field(default="0.0.0.0", description="Streamlit server address")
 
-    except Exception as e:
-        print(f"Warning: Could not import backend config: {e}")
-        print("Using fallback configuration...")
-        _backend_config_loaded = False
-        return None
-backend_settings = _load_backend_config()
-
-BACKEND_CONFIG_LOADED = _backend_config_loaded
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"),
+        env_file_encoding='utf-8',
+        case_sensitive=True,
+        extra='allow',
+        env_prefix='FRONTEND_'  # Frontend-specific env vars start with FRONTEND_
+    )
 
 
 @lru_cache()
-def get_frontend_settings():
-    if BACKEND_CONFIG_LOADED and backend_settings:
-        return backend_settings
-    else:
-        raise ImportError("Backend settings not loaded. Using fallback values.")
+def get_frontend_settings() -> FrontendSettings:
+    """Get cached frontend settings instance."""
+    return FrontendSettings()
+
+
+# Global settings instance
+frontend_settings = get_frontend_settings()
 
