@@ -398,6 +398,37 @@ class TestErrorHandlers:
     def test_general_exception_handler(self, sync_client):
         """Test general exception handler for unhandled errors."""
         with patch(
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
+            side_effect=Exception("Unhandled error"),
+        ):
+            response = sync_client.post(
+                "/action",
+                json={"action": "test"},
+            )
+            assert response.status_code == 500
+            assert "error" in response.json()
+
+    def test_general_exception_handler_with_error_code(self, sync_client):
+        """Test general exception handler includes error_code when present."""
+
+        class CustomException(Exception):
+            def __init__(self, message, error_code):
+                super().__init__(message)
+                self.error_code = error_code
+
+        with patch(
+            "services.stagehand_service.StagehandService.perform_action_with_observe",
+            side_effect=CustomException("Specific error", error_code="E1234"),
+        ):
+            response = sync_client.post(
+                "/action",
+                json={"action": "test"},
+            )
+            assert response.status_code == 500
+            data = response.json()
+            assert "error" in data
+            assert "error_code" in data
+            assert data["error_code"] == "E1234"
             "services.stagehand_service.StagehandService.take_screenshot",
             new=AsyncMock(side_effect=RuntimeError("Unexpected error")),
         ):
