@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 # Action Schemas (observe + act)
@@ -296,9 +296,16 @@ class ClickTypeRequest(BaseModel):
     url: str = Field(..., description="Target URL")
     x: int = Field(..., description="X coordinate to click", ge=0)
     y: int = Field(..., description="Y coordinate to click", ge=0)
-    text: Optional[str] = Field(None, description="Text to type after clicking (optional)")
+    text: Optional[str] = Field(None, description="Text to type after clicking (optional)", max_length=10000)
     press_enter: bool = Field(default=False, description="Press Enter after typing")
     take_screenshot: bool = Field(default=False, description="Take screenshot after action")
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError("Text cannot be empty string if provided")
+        return v
 
     class Config:
         json_schema_extra = {

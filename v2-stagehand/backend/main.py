@@ -1,8 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -34,8 +35,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Stagehand service
-stagehand_service = StagehandService()
+# Dependency for request-scoped service instances
+async def get_stagehand_service() -> AsyncGenerator[StagehandService, None]:
+    """
+    Dependency that provides a service instance per request.
+    This ensures no shared state between concurrent requests.
+    """
+    service = StagehandService()
+    try:
+        yield service
+    finally:
+        # Cleanup if needed
+        try:
+            await service.cleanup()
+        except Exception as e:
+            logger.error(f"Error during service cleanup: {e}")
 
 # Schema mapping for extraction
 SCHEMA_MAP = {
@@ -51,8 +65,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Stagehand AI Automation API...")
 
     try:
-        # Verify Stagehand configuration
-        connection_ok = await stagehand_service.test_connection()
+        # Verify Stagehand configuration (create temporary service for testing)
+        test_service = StagehandService()
+        connection_ok = await test_service.test_connection()
         if connection_ok:
             logger.info("✅ Stagehand configuration verified")
         else:
@@ -66,11 +81,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Stagehand API...")
-    try:
-        await stagehand_service.cleanup()
-        logger.info("✅ Browser resources cleaned up")
-    except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
+    logger.info("✅ Using request-scoped services - no global cleanup needed")
 
 
 # Initialize FastAPI app
@@ -101,10 +112,10 @@ async def health_check():
 
 
 @app.get("/health/ready", tags=["Health"])
-async def readiness_check():
+async def readiness_check(service: StagehandService = Depends(get_stagehand_service)):
     try:
         # Quick config check
-        is_ready = await stagehand_service.test_connection()
+        is_ready = await service.test_connection()
         if is_ready:
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
@@ -130,11 +141,13 @@ async def readiness_check():
     tags=["Stagehand"],
     summary="Execute single action (observe + act)"
 )
-async def execute_action(request: ActionRequest):
-
+async def execute_action(
+    request: ActionRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         logger.info(f"Executing action on {request.url}: {request.action_instruction}")
-        result = await stagehand_service.perform_action_with_observe(
+        result = await service.perform_action_with_observe(
             url=request.url,
             action_instruction=request.action_instruction,
             config={
@@ -159,7 +172,10 @@ async def execute_action(request: ActionRequest):
     tags=["Stagehand"],
     summary="Extract structured data"
 )
-async def extract_data(request: ExtractionRequest):
+async def extract_data(
+    request: ExtractionRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         logger.info(f"Extracting data from {request.url} using schema {request.schema_name}")
 
@@ -171,7 +187,7 @@ async def extract_data(request: ExtractionRequest):
                 detail=f"Unknown schema: {request.schema_name}. Available: {list(SCHEMA_MAP.keys())}"
             )
 
-        result = await stagehand_service.extract_with_schema(
+        result = await service.extract_with_schema(
             url=request.url,
             instruction=request.instruction,
             schema=schema_class,  # Pass actual Pydantic class, not string
@@ -198,10 +214,13 @@ async def extract_data(request: ExtractionRequest):
     tags=["Stagehand"],
     summary="Execute agent workflow"
 )
-async def execute_workflow(request: WorkflowRequest):
+async def execute_workflow(
+    request: WorkflowRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         logger.info(f"Executing workflow on {request.url}: {request.workflow_instruction}")
-        result = await stagehand_service.execute_workflow_with_agent(
+        result = await service.execute_workflow_with_agent(
             url=request.url,
             workflow_instruction=request.workflow_instruction,
             config={
@@ -225,10 +244,13 @@ async def execute_workflow(request: WorkflowRequest):
     response_model=MultiStepJobResponse,
     tags=["Stagehand"],
     summary="Execute multi-step sequential workflow")
-async def execute_multistep(request: MultiStepJobRequest):
+async def execute_multistep(
+    request: MultiStepJobRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         logger.info(f"Executing multi-step workflow on {request.url} with {len(request.instructions)} steps")
-        result = await stagehand_service.process_multi_step_instructions(
+        result = await service.process_multi_step_instructions(
             url=request.url,
             instructions=request.instructions,
             config={
@@ -292,10 +314,13 @@ async def list_available_schemas():
     tags=["Simple Actions"],
     summary="Take screenshot of webpage (no AI required)"
 )
-async def take_screenshot(request: ScreenshotRequest):
+async def take_screenshot(
+    request: ScreenshotRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         logger.info(f"Taking screenshot of {request.url}")
-        result = await stagehand_service.take_screenshot(url=request.url)
+        result = await service.take_screenshot(url=request.url)
         logger.info(f"Screenshot completed")
         return result
 
@@ -313,7 +338,10 @@ async def take_screenshot(request: ScreenshotRequest):
     tags=["Simple Actions"],
     summary="Click at coordinates, type text, and press enter (no AI required)"
 )
-async def click_type_enter(request: ClickTypeRequest):
+async def click_type_enter(
+    request: ClickTypeRequest,
+    service: StagehandService = Depends(get_stagehand_service)
+):
     try:
         # Defensive validation to ensure non-negative coordinates
         if request.x < 0 or request.y < 0:
@@ -323,7 +351,7 @@ async def click_type_enter(request: ClickTypeRequest):
             )
 
         logger.info(f"Click/type action on {request.url} at ({request.x}, {request.y})")
-        result = await stagehand_service.click_type_enter(
+        result = await service.click_type_enter(
             url=request.url,
             x=request.x,
             y=request.y,

@@ -13,6 +13,7 @@ Usage:
 
 import asyncio
 import base64
+import logging
 from typing import Optional, List, Dict, Any
 
 from fastmcp import FastMCP
@@ -20,6 +21,9 @@ from pydantic import BaseModel, Field
 
 from services.stagehand_service import StagehandService
 from schemas.stagehand_schemas import ProductData, JobPosting, CompanyInfo
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Initialize MCP server
 mcp = FastMCP("Stagehand AI Automation")
@@ -84,21 +88,29 @@ async def take_screenshot(input: ScreenshotInput) -> Dict[str, Any]:
     Returns:
         dict: Success status, screenshot data, and metadata
     """
-    result = await service.take_screenshot(url=input.url)
+    try:
+        result = await service.take_screenshot(url=input.url)
 
-    if result.get("success"):
-        return {
-            "success": True,
-            "message": f"Screenshot captured from {input.url}",
-            "screenshot_base64": result["screenshot"],
-            "url": result["url"],
-            "processing_time": result["processing_time"]
-        }
-    else:
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Screenshot captured from {input.url}",
+                "screenshot_base64": result["screenshot"],
+                "url": result["url"],
+                "processing_time": result["processing_time"]
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Screenshot failed"),
+                "error_code": result.get("error_code")
+            }
+    except Exception as e:
+        logger.error(f"Unhandled exception in take_screenshot: {e}")
         return {
             "success": False,
-            "error": result.get("error", "Screenshot failed"),
-            "error_code": result.get("error_code")
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "INTERNAL_ERROR"
         }
 
 
@@ -118,30 +130,38 @@ async def click_and_type(input: ClickTypeInput) -> Dict[str, Any]:
     Returns:
         dict: Success status and action details
     """
-    result = await service.click_type_enter(
-        url=input.url,
-        x=input.x,
-        y=input.y,
-        text=input.text,
-        press_enter=input.press_enter,
-        take_screenshot=input.take_screenshot
-    )
+    try:
+        result = await service.click_type_enter(
+            url=input.url,
+            x=input.x,
+            y=input.y,
+            text=input.text,
+            press_enter=input.press_enter,
+            take_screenshot=input.take_screenshot
+        )
 
-    if result.get("success"):
-        response = {
-            "success": True,
-            "message": result["action"],
-            "url": result["url"],
-            "processing_time": result["processing_time"]
-        }
-        if result.get("screenshot"):
-            response["screenshot_base64"] = result["screenshot"]
-        return response
-    else:
+        if result.get("success"):
+            response = {
+                "success": True,
+                "message": result["action"],
+                "url": result["url"],
+                "processing_time": result["processing_time"]
+            }
+            if result.get("screenshot"):
+                response["screenshot_base64"] = result["screenshot"]
+            return response
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Click/type action failed"),
+                "error_code": result.get("error_code")
+            }
+    except Exception as e:
+        logger.error(f"Unhandled exception in click_and_type: {e}")
         return {
             "success": False,
-            "error": result.get("error", "Click/type action failed"),
-            "error_code": result.get("error_code")
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "INTERNAL_ERROR"
         }
 
 
@@ -161,31 +181,39 @@ async def perform_action(input: ActionInput) -> Dict[str, Any]:
     Returns:
         dict: Success status, observed elements, and optional screenshots
     """
-    result = await service.perform_action_with_observe(
-        url=input.url,
-        action_instruction=input.action_instruction,
-        config={
-            "draw_overlay": input.draw_overlay,
-            "take_screenshots": input.take_screenshots
-        }
-    )
+    try:
+        result = await service.perform_action_with_observe(
+            url=input.url,
+            action_instruction=input.action_instruction,
+            config={
+                "draw_overlay": input.draw_overlay,
+                "take_screenshots": input.take_screenshots
+            }
+        )
 
-    if result.get("success"):
-        response = {
-            "success": True,
-            "message": f"Action completed: {result['action']}",
-            "observed_elements": result["observed_elements"],
-            "url": result["url"],
-            "processing_time": result["processing_time"]
-        }
-        if result.get("artifacts"):
-            response["artifacts"] = result["artifacts"]
-        return response
-    else:
+        if result.get("success"):
+            response = {
+                "success": True,
+                "message": f"Action completed: {result['action']}",
+                "observed_elements": result["observed_elements"],
+                "url": result["url"],
+                "processing_time": result["processing_time"]
+            }
+            if result.get("artifacts"):
+                response["artifacts"] = result["artifacts"]
+            return response
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Action failed"),
+                "error_code": result.get("error_code")
+            }
+    except Exception as e:
+        logger.error(f"Unhandled exception in perform_action: {e}")
         return {
             "success": False,
-            "error": result.get("error", "Action failed"),
-            "error_code": result.get("error_code")
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "INTERNAL_ERROR"
         }
 
 
@@ -204,43 +232,52 @@ async def extract_data(input: ExtractionInput) -> Dict[str, Any]:
     Returns:
         dict: Extracted structured data
     """
-    # Map schema name to class
-    schema_map = {
-        "ProductData": ProductData,
-        "JobPosting": JobPosting,
-        "CompanyInfo": CompanyInfo
-    }
-
-    schema = schema_map.get(input.schema_name)
-    if not schema:
-        return {
-            "success": False,
-            "error": f"Unknown schema: {input.schema_name}. Available: {list(schema_map.keys())}"
+    try:
+        # Map schema name to class
+        schema_map = {
+            "ProductData": ProductData,
+            "JobPosting": JobPosting,
+            "CompanyInfo": CompanyInfo
         }
 
-    result = await service.extract_with_schema(
-        url=input.url,
-        instruction=input.instruction,
-        schema=schema,
-        config={"take_screenshots": input.take_screenshots}
-    )
+        schema = schema_map.get(input.schema_name)
+        if not schema:
+            return {
+                "success": False,
+                "error": f"Unknown schema: {input.schema_name}. Available: {list(schema_map.keys())}",
+                "error_code": "INVALID_SCHEMA"
+            }
 
-    if result.get("success"):
-        response = {
-            "success": True,
-            "message": f"Data extracted using {input.schema_name}",
-            "data": result["data"],
-            "url": result["url"],
-            "processing_time": result["processing_time"]
-        }
-        if result.get("artifacts"):
-            response["artifacts"] = result["artifacts"]
-        return response
-    else:
+        result = await service.extract_with_schema(
+            url=input.url,
+            instruction=input.instruction,
+            schema=schema,
+            config={"take_screenshots": input.take_screenshots}
+        )
+
+        if result.get("success"):
+            response = {
+                "success": True,
+                "message": f"Data extracted using {input.schema_name}",
+                "data": result["data"],
+                "url": result["url"],
+                "processing_time": result["processing_time"]
+            }
+            if result.get("artifacts"):
+                response["artifacts"] = result["artifacts"]
+            return response
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Extraction failed"),
+                "error_code": result.get("error_code")
+            }
+    except Exception as e:
+        logger.error(f"Unhandled exception in extract_data: {e}")
         return {
             "success": False,
-            "error": result.get("error", "Extraction failed"),
-            "error_code": result.get("error_code")
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "INTERNAL_ERROR"
         }
 
 
@@ -261,30 +298,38 @@ async def execute_workflow(input: WorkflowInput) -> Dict[str, Any]:
     Returns:
         dict: Workflow execution results
     """
-    result = await service.execute_workflow_with_agent(
-        url=input.url,
-        workflow_instruction=input.workflow_instruction,
-        config={
-            "max_steps": input.max_steps,
-            "auto_screenshot": input.auto_screenshot,
-            "wait_between_actions": input.wait_between_actions
-        }
-    )
+    try:
+        result = await service.execute_workflow_with_agent(
+            url=input.url,
+            workflow_instruction=input.workflow_instruction,
+            config={
+                "max_steps": input.max_steps,
+                "auto_screenshot": input.auto_screenshot,
+                "wait_between_actions": input.wait_between_actions
+            }
+        )
 
-    if result.get("success"):
-        return {
-            "success": True,
-            "message": f"Workflow completed: {result['workflow']}",
-            "result": result["result"],
-            "url": result["url"],
-            "processing_time": result["processing_time"],
-            "execution_method": result.get("execution_method", "agent")
-        }
-    else:
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Workflow completed: {result['workflow']}",
+                "result": result["result"],
+                "url": result["url"],
+                "processing_time": result["processing_time"],
+                "execution_method": result.get("execution_method", "agent")
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Workflow execution failed"),
+                "error_code": result.get("error_code")
+            }
+    except Exception as e:
+        logger.error(f"Unhandled exception in execute_workflow: {e}")
         return {
             "success": False,
-            "error": result.get("error", "Workflow execution failed"),
-            "error_code": result.get("error_code")
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "INTERNAL_ERROR"
         }
 
 
