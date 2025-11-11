@@ -194,7 +194,7 @@ class TestMCPSchemaMapping:
         }
 
         # Just verify the expected schema names are valid identifiers
-        for schema_name in expected_schemas.keys():
+        for schema_name in expected_schemas:
             assert schema_name.isidentifier()
             assert not schema_name.startswith("_")
 
