@@ -709,10 +709,10 @@ class StagehandService:
             page = stagehand.page
 
             # Navigate to URL
-            await page.goto(url)
+            await page.goto(url, timeout=30000)
 
-            # Wait for network to be idle to ensure page is fully loaded
-            await page.wait_for_load_state('networkidle')
+            # Wait for network to be idle with explicit timeout to avoid hanging
+            await page.wait_for_load_state('networkidle', timeout=30000)
 
             # Take screenshot
             import base64
