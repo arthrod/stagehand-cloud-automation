@@ -711,8 +711,8 @@ class StagehandService:
             # Navigate to URL
             await page.goto(url)
 
-            # Wait a bit for page to settle
-            await asyncio.sleep(2)
+            # Wait for network to be idle to ensure page is fully loaded
+            await page.wait_for_load_state('networkidle')
 
             # Take screenshot
             import base64
