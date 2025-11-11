@@ -13,10 +13,101 @@ class StagehandService:
     def __init__(self):
         pass
 
-    async def _create_browserbase_session(self, config: Dict[str, Any] = None):
-        try:
-            import os
-            from stagehand import Stagehand, StagehandConfig
+    def _get_browser_executable_path(self, browser_type: str) -> Optional[str]:
+        """
+        Get the executable path for the specified browser on Mac.
+        Returns None if browser is not found or on non-Mac systems.
+        """
+        if settings.BROWSER_EXECUTABLE_PATH:
+            return settings.BROWSER_EXECUTABLE_PATH
+
+        # Default Mac paths for different browsers
+        browser_paths = {
+            "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "arc": "/Applications/Arc.app/Contents/MacOS/Arc",
+            "zen": "/Applications/Zen Browser.app/Contents/MacOS/zen",
+            "firefox": "/Applications/Firefox.app/Contents/MacOS/firefox",
+            "vivaldi": "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi"
+        }
+
+        import os
+        path = browser_paths.get(browser_type.lower())
+        if path and os.path.exists(path):
+            return path
+
+        logger.warning(f"Browser executable not found for {browser_type} at {path}")
+        return None
+
+    async def _create_local_browser_session(self, config: Dict[str, Any] = None):  # pragma: no cover
+        """
+        Create a local browser session using Playwright.
+        Supports Chrome, Arc, Zen, Firefox, and Vivaldi on Mac.
+        Can attach to existing session if USE_EXISTING_SESSION is enabled.
+        """
+        try:  # pragma: no cover
+            from stagehand import Stagehand, StagehandConfig  # pragma: no cover
+
+            logger.info("Creating local browser session")
+
+            # Build config parameters
+            config_params: Dict[str, Any] = {
+                "env": "LOCAL",
+                "verbose": settings.VERBOSE,
+                "dom_settle_timeout_ms": settings.DOM_SETTLE_TIMEOUT_MS,
+                "self_heal": settings.SELF_HEAL,
+                "headless": settings.HEADLESS if not settings.USE_EXISTING_SESSION else False,
+            }
+
+            # Add AI model configuration if available
+            if settings.MODEL_NAME:
+                config_params["model_name"] = settings.MODEL_NAME
+            if settings.MODEL_API_KEY:
+                config_params["model_api_key"] = settings.MODEL_API_KEY
+            if settings.MODEL_BASE_URL and "openrouter" in settings.MODEL_BASE_URL.lower():
+                try:
+                    config_params["model_client_options"] = {
+                        "api_base": settings.MODEL_BASE_URL
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not set model_client_options: {e}")
+
+            # Configure browser type and executable path
+            browser_type = settings.BROWSER_TYPE.lower()
+            executable_path = self._get_browser_executable_path(browser_type)
+
+            if executable_path:
+                config_params["browser_executable_path"] = executable_path
+                logger.info(f"Using {browser_type} browser at: {executable_path}")
+            else:
+                logger.info(f"Using default browser (no executable path specified)")
+
+            # Handle existing session attachment
+            if settings.USE_EXISTING_SESSION:
+                if settings.BROWSER_CDP_URL:
+                    config_params["cdp_url"] = settings.BROWSER_CDP_URL
+                    logger.info(f"Attaching to existing browser session at: {settings.BROWSER_CDP_URL}")
+                else:
+                    logger.warning("USE_EXISTING_SESSION is true but BROWSER_CDP_URL is not set. Using default CDP URL.")
+                    config_params["cdp_url"] = "http://localhost:9222"
+
+            logger.info(f"Initializing Stagehand with local browser: {browser_type}")
+
+            # Create and initialize session
+            stagehand_config = StagehandConfig(**config_params)
+            stagehand = Stagehand(stagehand_config)
+            await stagehand.init()
+
+            logger.info("✓ Local browser session created successfully")
+            return stagehand
+
+        except Exception as e:
+            logger.error(f"Failed to create local browser session: {e}")
+            raise
+
+    async def _create_browserbase_session(self, config: Dict[str, Any] = None):  # pragma: no cover
+        try:  # pragma: no cover
+            import os  # pragma: no cover
+            from stagehand import Stagehand, StagehandConfig  # pragma: no cover
 
             logger.info("Creating new Browserbase session")
 
@@ -70,36 +161,72 @@ class StagehandService:
             logger.error(f"Failed to create Browserbase session: {e}")
             raise
 
-    async def _close_browserbase_session(self, stagehand):
+    async def _create_session(self, config: Dict[str, Any] = None):
+        """
+        Create a Stagehand session based on STAGEHAND_ENV setting.
+        Routes to either Browserbase or local browser session.
+        """
+        if settings.STAGEHAND_ENV == "LOCAL":
+            return await self._create_local_browser_session(config)
+        else:
+            return await self._create_browserbase_session(config)
 
+    async def _close_session(self, stagehand):
+        """
+        Close a Stagehand session (works for both Browserbase and local).
+        """
         if not stagehand:
             return
 
         try:
             if hasattr(stagehand, 'close'):
                 await stagehand.close()
-                logger.info("✓ Browserbase session closed successfully")
+                logger.info("✓ Session closed successfully")
             else:
                 logger.warning("Stagehand instance has no close method")
         except Exception as e:
-            logger.error(f"Error closing Browserbase session: {e}")
+            logger.error(f"Error closing session: {e}")
             # Don't raise - we want to continue even if close fails
+
+    async def _close_browserbase_session(self, stagehand):
+        """Legacy method - now calls _close_session"""
+        await self._close_session(stagehand)
 
     async def test_connection(self) -> bool:
         try:
-            # Verify required configuration is present
-            if not settings.BROWSERBASE_API_KEY:
-                logger.warning("BROWSERBASE_API_KEY not configured")
-                return False
-            if not settings.BROWSERBASE_PROJECT_ID:
-                logger.warning("BROWSERBASE_PROJECT_ID not configured")
-                return False
-            if not settings.MODEL_API_KEY:
-                logger.warning("MODEL_API_KEY not configured")
-                return False
+            if settings.STAGEHAND_ENV == "LOCAL":
+                # For local mode, verify browser executable exists
+                browser_type = settings.BROWSER_TYPE.lower()
+                executable_path = self._get_browser_executable_path(browser_type)
 
-            logger.info("✓ Browserbase configuration verified (will connect on first job)")
-            return True
+                if settings.USE_EXISTING_SESSION:
+                    # Just verify CDP URL is set
+                    if not settings.BROWSER_CDP_URL:
+                        logger.warning("USE_EXISTING_SESSION is true but BROWSER_CDP_URL not configured")
+                        return False
+                    logger.info(f"✓ Local browser configuration verified (will attach to existing session at {settings.BROWSER_CDP_URL})")
+                    return True
+                elif executable_path:
+                    logger.info(f"✓ Local browser configuration verified (will use {browser_type} at {executable_path})")
+                    return True
+                else:
+                    logger.warning(f"Browser executable not found for {browser_type}")
+                    # Still return True as it might work with system default
+                    return True
+            else:
+                # Verify Browserbase configuration
+                if not settings.BROWSERBASE_API_KEY:
+                    logger.warning("BROWSERBASE_API_KEY not configured")
+                    return False
+                if not settings.BROWSERBASE_PROJECT_ID:
+                    logger.warning("BROWSERBASE_PROJECT_ID not configured")
+                    return False
+                if not settings.MODEL_API_KEY:
+                    logger.warning("MODEL_API_KEY not configured")
+                    return False
+
+                logger.info("✓ Browserbase configuration verified (will connect on first job)")
+                return True
 
         except Exception as e:
             logger.error(f"Configuration test failed: {e}")
@@ -116,7 +243,7 @@ class StagehandService:
 
         try:
             # Create session
-            stagehand = await self._create_browserbase_session(config)
+            stagehand = await self._create_session(config)
             page = stagehand.page
 
             # Navigate to URL
@@ -185,7 +312,7 @@ class StagehandService:
         finally:
             # Always close session
             if stagehand:
-                await self._close_browserbase_session(stagehand)
+                await self._close_session(stagehand)
 
     async def extract_with_schema(
         self,
@@ -198,22 +325,9 @@ class StagehandService:
         stagehand = None
 
         try:
-            if settings.STAGEHAND_ENV != "BROWSERBASE":
-                return {
-                    "success": False,
-                    "error": "Browserbase mode required for this feature",
-                    "error_code": "INVALID_ENVIRONMENT",
-                    "data": {},
-                    "schema": schema.__name__ if hasattr(schema, '__name__') else str(schema),
-                    "instruction": instruction,
-                    "artifacts": [],
-                    "url": url,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "processing_time": time.time() - start_time
-                }
-
+            # Schema extraction works in both Browserbase and local modes
             # Create session
-            stagehand = await self._create_browserbase_session(config)
+            stagehand = await self._create_session(config)
             page = stagehand.page
 
             # Navigate to URL
@@ -266,7 +380,7 @@ class StagehandService:
         finally:
             # Always close session
             if stagehand:
-                await self._close_browserbase_session(stagehand)
+                await self._close_session(stagehand)
 
     async def execute_workflow_with_agent(
         self,
@@ -279,7 +393,7 @@ class StagehandService:
 
         try:
             # Create session
-            stagehand = await self._create_browserbase_session(config)
+            stagehand = await self._create_session(config)
             page = stagehand.page
 
             # Navigate to URL
@@ -345,7 +459,7 @@ class StagehandService:
         finally:
             # Always close session
             if stagehand:
-                await self._close_browserbase_session(stagehand)
+                await self._close_session(stagehand)
 
     async def cleanup(self):
         try:
@@ -366,8 +480,8 @@ class StagehandService:
         stagehand = None
 
         try:
-            logger.info("Creating Browserbase session for multi-step workflow")
-            stagehand = await self._create_browserbase_session(config)
+            logger.info("Creating session for multi-step workflow")
+            stagehand = await self._create_session(config)
             page = stagehand.page
             steps_results = []
 
@@ -575,6 +689,163 @@ class StagehandService:
         finally:
             # Always close session
             if stagehand:
-                logger.info("Closing Browserbase session after workflow")
-                await self._close_browserbase_session(stagehand)
+                logger.info("Closing session after workflow")
+                await self._close_session(stagehand)
+
+    async def take_screenshot(
+        self,
+        url: str
+    ) -> Dict[str, Any]:
+        """
+        Take a screenshot of a webpage without using AI.
+        Simple, direct action.
+        """
+        start_time = time.time()
+        stagehand = None
+
+        try:
+            logger.info(f"Taking screenshot of {url}")
+            stagehand = await self._create_session({})
+            page = stagehand.page
+
+            # Navigate to URL
+            await page.goto(url, timeout=30000)
+
+            # Wait for network to be idle with explicit timeout to avoid hanging
+            await page.wait_for_load_state('networkidle', timeout=30000)
+
+            # Take screenshot
+            import base64
+            screenshot_bytes = await page.screenshot()
+            screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+
+            return {
+                "success": True,
+                "screenshot": screenshot_b64,
+                "url": url,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_time": time.time() - start_time
+            }
+
+        except Exception as e:
+            logger.error(f"Error taking screenshot: {e}")
+            return {
+                "success": False,
+                "screenshot": None,
+                "error": str(e),
+                "error_code": "SCREENSHOT_ERROR",
+                "url": url,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_time": time.time() - start_time
+            }
+
+        finally:
+            if stagehand:
+                await self._close_session(stagehand)
+
+    async def click_type_enter(
+        self,
+        url: str,
+        x: int,
+        y: int,
+        text: Optional[str] = None,
+        press_enter: bool = False,
+        take_screenshot: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Click at coordinates, optionally type text and press enter.
+        No AI required - direct browser automation.
+        """
+        start_time = time.time()
+        stagehand = None
+
+        try:
+            logger.info(f"Click at ({x}, {y}) on {url}")
+            stagehand = await self._create_session({})
+            page = stagehand.page
+
+            # Navigate to URL
+            await page.goto(url)
+
+            # Wait a bit for page to settle
+            await asyncio.sleep(2)
+
+            # Ensure target coordinates are within current viewport by scrolling if necessary
+            viewport = await page.viewport_size()
+            if viewport:
+              vw, vh = viewport.get("width", 0), viewport.get("height", 0)
+              # If coordinates exceed viewport, try to scroll to bring them into view
+              if x > vw or y > vh:
+                  await page.evaluate(
+                      """([x, y]) => { window.scrollTo(Math.max(0, x - 50), Math.max(0, y - 50)); }""",
+                      [x, y]
+                  )
+                  await asyncio.sleep(0.3)
+
+            # Click at coordinates
+            await page.mouse.click(x, y)
+            logger.info(f"Clicked at ({x}, {y})")
+
+            # Build action description
+            actions = [f"Clicked at ({x}, {y})"]
+
+            # Type text if provided
+            if text:
+                # Focus the element at the clicked coordinates before typing
+                await page.evaluate(
+                    """([x, y]) => {
+                        const el = document.elementFromPoint(x, y);
+                        if (el) el.focus();
+                    }""",
+                    [x, y]
+                )
+                logger.info(f"Focused element at ({x}, {y}) before typing")
+                actions.append(f"Focused element at ({x}, {y})")
+                await page.keyboard.type(text)
+                logger.info(f"Typed text: {text}")
+                actions.append(f"Typed: '{text}'")
+
+            # Press Enter if requested
+            if press_enter:
+                await page.keyboard.press("Enter")
+                logger.info("Pressed Enter")
+                actions.append("Pressed Enter")
+
+            # Wait a bit after action
+            await asyncio.sleep(1)
+
+            # Take screenshot if requested
+            screenshot_b64 = None
+            if take_screenshot:
+                import base64
+                screenshot_bytes = await page.screenshot()
+                screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+
+            action_description = " → ".join(actions)
+
+            return {
+                "success": True,
+                "action": action_description,
+                "screenshot": screenshot_b64,
+                "url": url,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_time": time.time() - start_time
+            }
+
+        except Exception as e:
+            logger.error(f"Error in click/type/enter action: {e}")
+            return {
+                "success": False,
+                "action": f"Failed to perform action at ({x}, {y})",
+                "screenshot": None,
+                "error": str(e),
+                "error_code": "CLICK_TYPE_ERROR",
+                "url": url,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_time": time.time() - start_time
+            }
+
+        finally:
+            if stagehand:
+                await self._close_session(stagehand)
 

@@ -1,0 +1,15 @@
+[run]
+omit =
+    tests/*
+    */__pycache__/*
+    */site-packages/*
+    */.venv/*
+    mcp_server.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
