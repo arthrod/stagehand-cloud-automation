@@ -770,6 +770,18 @@ class StagehandService:
             # Wait a bit for page to settle
             await asyncio.sleep(2)
 
+            # Ensure target coordinates are within current viewport by scrolling if necessary
+            viewport = await page.viewport_size()
+            if viewport:
+              vw, vh = viewport.get("width", 0), viewport.get("height", 0)
+              # If coordinates exceed viewport, try to scroll to bring them into view
+              if x > vw or y > vh:
+                  await page.evaluate(
+                      """([x, y]) => { window.scrollTo(Math.max(0, x - 50), Math.max(0, y - 50)); }""",
+                      [x, y]
+                  )
+                  await asyncio.sleep(0.3)
+
             # Click at coordinates
             await page.mouse.click(x, y)
             logger.info(f"Clicked at ({x}, {y})")
