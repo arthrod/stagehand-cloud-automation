@@ -436,6 +436,26 @@ class TestMultiStepInstructions:
         """Test successful multi-step processing."""
         service = StagehandService()
 
+    @pytest.mark.asyncio
+    async def test_process_multi_step_error(self, mock_stagehand_instance):
+        """Test error handling in multi-step processing."""
+        service = StagehandService()
+
+        # Simulate a step failure by patching the method that processes steps
+        with patch.object(service, "process_multi_step_instructions", new=AsyncMock(return_value={
+            "success": False,
+            "error": "Step 2 failed due to invalid input"
+        })):
+            result = await service.process_multi_step_instructions(
+                url="https://example.com",
+                workflow_instruction="Step 1: Do X. Step 2: Do Y.",
+                config={}
+            )
+
+            assert result["success"] is False
+            assert "error" in result
+            assert result["error"] == "Step 2 failed due to invalid input"
+
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
                 instructions = [
