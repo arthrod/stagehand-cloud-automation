@@ -239,15 +239,16 @@ class TestActionMethods:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.perform_action_with_observe(
-                    url="https://example.com",
-                    action_instruction="Click button",
-                    config={"draw_overlay": False, "take_screenshots": True},
-                )
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.perform_action_with_observe(
+                        url="https://example.com",
+                        action_instruction="Click button",
+                        config={"draw_overlay": False, "take_screenshots": True},
+                    )
 
-                assert result["success"] is True
-                assert len(result["artifacts"]) == 1
-                assert result["artifacts"][0]["type"] == "screenshot"
+                    assert result["success"] is True
+                    assert len(result["artifacts"]) == 1
+                    assert result["artifacts"][0]["type"] == "screenshot"
 
     @pytest.mark.asyncio
     async def test_perform_action_no_elements(
@@ -259,7 +260,8 @@ class TestActionMethods:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.perform_action_with_observe(
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.perform_action_with_observe(
                     url="https://example.com",
                     action_instruction="Click button",
                     config={},
@@ -281,7 +283,8 @@ class TestScreenshotMethod:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.take_screenshot(url="https://example.com")
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.take_screenshot(url="https://example.com")
 
                 assert result["success"] is True
                 assert result["screenshot"] is not None
@@ -297,7 +300,8 @@ class TestScreenshotMethod:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.take_screenshot(url="https://example.com")
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.take_screenshot(url="https://example.com")
 
                 assert result["success"] is False
                 assert result["error_code"] == "SCREENSHOT_ERROR"
@@ -315,20 +319,21 @@ class TestClickTypeEnterMethod:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.click_type_enter(
-                    url="https://example.com",
-                    x=100,
-                    y=200,
-                    text="test query",
-                    press_enter=True,
-                    take_screenshot=True,
-                )
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.click_type_enter(
+                        url="https://example.com",
+                        x=100,
+                        y=200,
+                        text="test query",
+                        press_enter=True,
+                        take_screenshot=True,
+                    )
 
-                assert result["success"] is True
-                assert "Clicked" in result["action"]
-                assert "Typed" in result["action"]
-                assert "Enter" in result["action"]
-                assert result["screenshot"] is not None
+                    assert result["success"] is True
+                    assert "Clicked" in result["action"]
+                    assert "Typed" in result["action"]
+                    assert "Enter" in result["action"]
+                    assert result["screenshot"] is not None
 
     @pytest.mark.asyncio
     async def test_click_type_enter_click_only(
@@ -339,7 +344,8 @@ class TestClickTypeEnterMethod:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.click_type_enter(
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.click_type_enter(
                     url="https://example.com", x=50, y=75, text=None, press_enter=False
                 )
 
@@ -359,9 +365,10 @@ class TestClickTypeEnterMethod:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.click_type_enter(
-                    url="https://example.com", x=100, y=200
-                )
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.click_type_enter(
+                        url="https://example.com", x=100, y=200
+                    )
 
                 assert result["success"] is False
                 assert result["error_code"] == "CLICK_TYPE_ERROR"
@@ -389,13 +396,14 @@ class TestExtractWithSchema:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                from schemas.stagehand_schemas import ProductData
-                result = await service.extract_with_schema(
-                    url="https://example.com",
-                    instruction="Extract product",
-                    schema=ProductData,
-                    config={"take_screenshots": False}
-                )
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    from schemas.stagehand_schemas import ProductData
+                    result = await service.extract_with_schema(
+                        url="https://example.com",
+                        instruction="Extract product",
+                        schema=ProductData,
+                        config={"take_screenshots": False}
+                    )
 
                 assert result["success"] is True
                 assert "data" in result
@@ -419,9 +427,8 @@ class TestWorkflowExecution:
             try:
                 await service.execute_workflow_with_agent(
                     url="https://example.com",
-                    instruction="Extract product",
-                    schema=ProductData,
-                    config={"take_screenshots": False}
+                    workflow_instruction="Complete workflow",
+                    config={}
                 )
             except Exception as exc:
                 assert str(exc) == "Agent failed"
@@ -431,7 +438,8 @@ class TestWorkflowExecution:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                result = await service.execute_workflow_with_agent(
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    result = await service.execute_workflow_with_agent(
                     url="https://example.com",
                     workflow_instruction="Complete the form",
                     config={}
@@ -470,16 +478,17 @@ class TestMultiStepInstructions:
 
         with patch.object(service, "_create_session", new=AsyncMock(return_value=mock_stagehand_instance)):
             with patch.object(service, "_close_session", new=AsyncMock()):
-                instructions = [
-                    {"instruction_type": "goto", "instruction_text": "https://example.com"},
-                    {"instruction_type": "act", "instruction_text": "Click button"},
-                ]
+                with patch.object(service, "_navigate_with_retry", new=AsyncMock()):
+                    instructions = [
+                        {"instruction_type": "goto", "instruction_text": "https://example.com"},
+                        {"instruction_type": "act", "instruction_text": "Click button"},
+                    ]
 
-                result = await service.process_multi_step_instructions(
-                    url="https://example.com",
-                    instructions=instructions,
-                    config={}
-                )
+                    result = await service.process_multi_step_instructions(
+                        url="https://example.com",
+                        instructions=instructions,
+                        config={}
+                    )
 
                 assert result["success"] is True
                 assert result["total_steps"] == 2
