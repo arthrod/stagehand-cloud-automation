@@ -779,6 +779,16 @@ class StagehandService:
 
             # Type text if provided
             if text:
+                # Focus the element at the clicked coordinates before typing
+                await page.evaluate(
+                    """([x, y]) => {
+                        const el = document.elementFromPoint(x, y);
+                        if (el) el.focus();
+                    }""",
+                    [x, y]
+                )
+                logger.info(f"Focused element at ({x}, {y}) before typing")
+                actions.append(f"Focused element at ({x}, {y})")
                 await page.keyboard.type(text)
                 logger.info(f"Typed text: {text}")
                 actions.append(f"Typed: '{text}'")
